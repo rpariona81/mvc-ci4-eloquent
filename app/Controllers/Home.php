@@ -26,7 +26,7 @@ class Home extends BaseController
     public function listUsers()
     {
         //$data =Role_Eloquent::all();
-        $data =User_Eloquent::all();
+        $data = User_Eloquent::all();
         return json_encode($data);
     }
 }

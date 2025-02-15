@@ -33,7 +33,12 @@ class Home extends BaseController
     {
         //$data =Role_Eloquent::all();
         $data = User_Eloquent::all();
-        return json_encode($data);
+        //return json_encode($data);
+        // $db = db_connect();
+        // $data['info_db'] = $db->getPlatform();
+        // $data['version_db'] = $db->getConnectDuration(5.2);
+        //print_r($data);
+        return view('welcome_message',compact('data'));
     }
 
     public function infophp()

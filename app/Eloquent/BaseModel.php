@@ -24,7 +24,7 @@ class BaseModel extends Model
 	// Only for MSSQL
 	public function fromDateTime($value)
 	{
-		if (getenv('DB_CONNECTION') == 'sqlsrv') {
+		if (env('DB_DRIVER') == 'sqlsrv') {
 			return Carbon::parse(parent::fromDateTime($value))->format('Y-m-d H:i:s');
 		}
 		return $value;

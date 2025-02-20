@@ -31,14 +31,15 @@ class Home extends BaseController
 
     public function listUsers()
     {
-        //$data =Role_Eloquent::all();
-        $data = User_Eloquent::all();
-        //return json_encode($data);
+        $roles =Role_Eloquent::all();
+        //$data = User_Eloquent::all();
+        $data = User_Eloquent::getUsersRoles(1,NULL,NULL);
+        return json_encode($data);
         // $db = db_connect();
         // $data['info_db'] = $db->getPlatform();
         // $data['version_db'] = $db->getConnectDuration(5.2);
         //print_r($data);
-        return view('welcome_message',compact('data'));
+        //return view('welcome_message',compact(['data','roles']));
     }
 
     public function infophp()

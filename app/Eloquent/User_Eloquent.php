@@ -4,6 +4,7 @@ namespace App\Eloquent;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 //https://notes.enovision.net/codeigniter/eloquent-in-codeigniter/how-to-use-the-models
 
@@ -12,18 +13,19 @@ class User_Eloquent extends BaseModel
 	protected $table = 't_users';
 
 	protected $fillable = [
+		'avatar',
 		'username',
 		'display_name',
-		'mobile',
 		'email',
 		'password',
-		'salt',
-		'user_type', //rango 1=admin 2=others users
+		'user_type', //Enum 1=User 2=Admin 3=Sysadmin 4=Guest
 		'remember_token', //varchar
 		'email_verified_at', //datetime
 		'api_token',
+		'ip_address',
 		'created_by',
-		'updated_by'
+		'updated_by',
+		'salt_decode'
 	];
 
 	/**
@@ -34,7 +36,7 @@ class User_Eloquent extends BaseModel
 	protected $hidden = [
 		'password',
 		'remember_token',
-		'salt',
+		'salt_decode',
 		'user_type'
 	];
 
@@ -45,7 +47,7 @@ class User_Eloquent extends BaseModel
 		'id' => 'integer'
 	];
 
-	protected $appends = ['userflag', 'lock', 'pwd'];
+	protected $appends = ['userflag', 'lock'];
 
 	// Carbon instance fields
 	protected $dates = ['created_at', 'updated_at', 'deleted_at', 'updated_at_role'];
@@ -77,7 +79,7 @@ class User_Eloquent extends BaseModel
 		//return date_diff(date_create($this->date_vigency), date_create('now'))->d;
 		//https://blog.devgenius.io/how-to-find-the-number-of-days-between-two-dates-in-php-1404748b1e84
 		//return date_diff(date_create('now'),date_create($this->date_vigency))->format('%R%a days');return date_diff(date_create('now'),date_create($this->date_vigency))->format('%R%a days');
-		if ($this->user_type == 1) {
+		if ($this->user_type == 'User') {
 			return 1;
 		} else {
 			return 0;
@@ -85,10 +87,11 @@ class User_Eloquent extends BaseModel
 	}
 
 	//https://stackoverflow.com/questions/62003963/how-to-save-and-retrieve-base64-encoded-data-using-laravel-model
-	public function getPwdAttribute()
+	//public function getPwdAttribute()
+	public function getPassword()
 	{
-		if ($this->salt) {
-			return base64_decode($this->salt);
+		if ($this->salt_decode) {
+			return base64_decode($this->salt_decode);
 		} else {
 			return;
 		}
@@ -109,22 +112,23 @@ class User_Eloquent extends BaseModel
 	 * @param integer $status_select
 	 * @return void
 	 */
-	public static function DDgetUsersRoles($except_id = NULL, $role_select = NULL, $status_select = NULL)
+	public static function DDgetUsersRoles($except_id = NULL, $role_select = NULL, $status_select = NULL): Collection
 	{
 		//DB::statement('PRAGMA foreign_keys = OFF');
 		//DB::statement(DB::raw('set @row:=0'));
 		/*$data = DB::table('t_users')->selectRaw('*, ROW_NUMBER() OVER(ORDER BY updated_at) AS NoId')->get();
 		return $data;*/
 
-		return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-			->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+		
+		return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+			->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 			->where('t_users.id', '!=', $except_id)
 			//->orderBy('t_users.updated_at', 'desc')
-			->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+			->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 			->orderBy('row', 'asc')->get();
-
+		
 		//return User_Eloquent::selectRaw('t_users.*, @row:=@row+1 as row')->get();
-		//->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);
+		//->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);
 
 	}
 
@@ -136,7 +140,7 @@ class User_Eloquent extends BaseModel
 	 * @param integer $status_select
 	 * @return void
 	 */
-	public static function getUsersRoles($except_id = NULL, $role_select = NULL, $status_select = NULL)
+	public static function getUsersRoles($except_id = NULL, $role_select = NULL, $status_select = NULL): Collection
 	{
 		//Para crear row_numer en SQLITE https://stackoverflow.com/questions/16847574/how-to-use-row-number-in-sqlite
 		//Esta opción tambien funciona con MariaDB
@@ -144,97 +148,97 @@ class User_Eloquent extends BaseModel
 		if ($role_select != NULL && $status_select != NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->where('t_role_user.role_id', '=', $role_select)
+					->where('t_users_has_t_roles.t_roles_id', '=', $role_select)
 					->where('t_users.status', '=', $status_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')->get();
 
-				/*->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+				/*->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else if ($role_select != NULL && $status_select == NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->where('t_role_user.role_id', '=', $role_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->where('t_users_has_t_roles.t_roles_id', '=', $role_select)
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else if ($role_select == NULL && $status_select != NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
 					->where('t_users.status', '=', $status_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
-				//->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);
+				//->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		}
 
-		/*return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-			->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+		/*return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+			->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 			->orderBy('t_users.updated_at', 'desc')
-			//->orderBy('t_role_user.updated_at', 'desc')			
-			->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);
+			//->orderBy('t_users_has_t_roles.updated_at', 'desc')			
+			->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);
 			*/
 
 		/*DB::statement(DB::raw('set @row:=0'));
-			return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-				->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+			return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+				->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 				->where('t_users.id', '!=', $except_id)
 				->selectRaw('t_users.*, @row:=@row+1 as row')
 				->orderBy('t_users.updated_at', 'desc')
-				->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+				->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 	}
 
 	/**
@@ -245,21 +249,21 @@ class User_Eloquent extends BaseModel
 	 */
 	public static function getUser($id)
 	{
-		return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-			->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+		return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+			->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 			->where('t_users.id', '=', $id)
 			->where('t_users.user_type', '>', 1)
-			->select('t_users.*', 't_role_user.role_id', 't_roles.rolename')
+			->select('t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename')
 			->first();
 	}
 
 
 	public static function getUserAccesos($id)
 	{
-		return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-			->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+		return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+			->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 			->where('t_users.id', '=', $id)
-			->select('t_users.*', 't_role_user.role_id', 't_roles.rolename')
+			->select('t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename')
 			->first();
 	}
 
@@ -286,7 +290,7 @@ class User_Eloquent extends BaseModel
 		try {
 			$model = new User_Eloquent();
 
-			$role = Role_Eloquent::findOrFail($request['role_id']);	//code...
+			$role = Role_Eloquent::findOrFail($request['roles_id']);	//code...
 
 			/*if ($model) {
 				$model->fill($data);
@@ -296,17 +300,17 @@ class User_Eloquent extends BaseModel
 			if ($role) {
 				$model->fill($data);
 				$model->save($data);
-				$role_user = RoleUser_Eloquent::where('user_id',  $model->id)->first();
+				$role_user = RoleUser_Eloquent::where('users_id',  $model->id)->first();
 
 				if ($role_user !== null) {
-					$role_user->update(['role_id' => $request['role_id']]);
+					$role_user->update(['roles_id' => $request['roles_id']]);
 					$model->updated_at = Carbon::now();
 					$model->save();
 					return $model;
 				} else {
 					$user = RoleUser_Eloquent::create([
-						'user_id' => $model->id,
-						'role_id' => $request['role_id']
+						'users_id' => $model->id,
+						'roles_id' => $request['roles_id']
 					]);
 					$model->updated_at = Carbon::now();
 					$model->save();
@@ -348,7 +352,7 @@ class User_Eloquent extends BaseModel
 			//$model->fill($data);
 			//$model->save($data);
 
-			$role = Role_Eloquent::findOrFail($request['role_id']);	//code...
+			$role = Role_Eloquent::findOrFail($request['roles_id']);	//code...
 
 			if ($model) {
 				$model->fill($data);
@@ -356,17 +360,17 @@ class User_Eloquent extends BaseModel
 			}
 
 			if ($role) {
-				$role_user = RoleUser_Eloquent::where('user_id',  $request['id'])->first();
+				$role_user = RoleUser_Eloquent::where('users_id',  $request['id'])->first();
 
 				if ($role_user !== null) {
-					$role_user->update(['role_id' => $request['role_id']]);
+					$role_user->update(['roles_id' => $request['roles_id']]);
 					$model->updated_at = Carbon::now();
 					$model->save();
 					return $model;
 				} else {
 					$user = RoleUser_Eloquent::create([
-						'user_id' => $request['id'],
-						'role_id' => $request['role_id']
+						'users_id' => $request['id'],
+						'roles_id' => $request['roles_id']
 					]);
 					$model->updated_at = Carbon::now();
 					$model->save();
@@ -382,15 +386,15 @@ class User_Eloquent extends BaseModel
 
 
 		// if ($role) {
-		//     $role_user = RoleUser_Eloquent::where('user_id',  $request['id'])->first();
+		//     $role_user = RoleUser_Eloquent::where('users_id',  $request['id'])->first();
 
 		//     if ($role_user !== null) {
-		//         $role_user->update(['role_id' => $request['role_id']]);
+		//         $role_user->update(['roles_id' => $request['roles_id']]);
 		// 		return $role_user;
 		//     } else {
 		//         $user = RoleUser_Eloquent::create([
-		//             'user_id' => $request['id'],
-		//             'role_id' => $request['role_id']
+		//             'users_id' => $request['id'],
+		//             'roles_id' => $request['roles_id']
 		//         ]);
 		// 		return $user;
 		//     }
@@ -415,9 +419,9 @@ class User_Eloquent extends BaseModel
 	 */
 	public static function getUserBy($column, $value)
 	{
-		return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-			->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
-			->select('t_users.*', 't_role_user.role_id', 't_roles.rolename')
+		return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+			->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
+			->select('t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename')
 			->where($column, '=', $value)->first();
 	}
 
@@ -440,19 +444,19 @@ class User_Eloquent extends BaseModel
 		} else {
 			if ($userValidate->status) {
 				if (password_verify($pass, $userValidate['password'])) {
-					$role_user = RoleUser_Eloquent::where('user_id',  $userValidate['id'])->first();
+					$role_user = RoleUser_Eloquent::where('users_id',  $userValidate['id'])->first();
 					//print_r($role_user);
-					$role = Role_Eloquent::findOrFail($role_user['role_id']);
+					$role = Role_Eloquent::findOrFail($role_user['roles_id']);
 					if ($role) {
 						if ($role->status) {
 							$arrayLogin = array(
 								'user_login' => $userValidate['username'],
 								'user_nickname' => $userValidate['display_name'],
 								'user_email' => $userValidate['email'],
-								'user_id' => $userValidate['id'],
+								'users_id' => $userValidate['id'],
 								'user_role' => $role['rolename'],
 								'user_guard' => $role['guard_name'],
-								'user_role_id' => $role['id'],
+								'user_roles_id' => $role['id'],
 								'user_level' => $userValidate['user_type'],
 								'isLogged' => TRUE,
 							);
@@ -533,82 +537,82 @@ class User_Eloquent extends BaseModel
 		if ($role_select != NULL && $status_select != NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->where('t_role_user.role_id', '=', $role_select)
+					->where('t_users_has_t_roles.t_roles_id', '=', $role_select)
 					->where('t_users.status', '=', $status_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')
 					->skip($skip)->take($take)->get();
 
-				/*->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+				/*->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else if ($role_select != NULL && $status_select == NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->where('t_role_user.role_id', '=', $role_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->where('t_users_has_t_roles.t_roles_id', '=', $role_select)
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')
 					->skip($skip)->take($take)->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else if ($role_select == NULL && $status_select != NULL) {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
 					->where('t_users.status', '=', $status_select)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')
 					->skip($skip)->take($take)->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
 				/*->selectRaw('*, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
-					->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);*/
+					->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);*/
 			} catch (\Throwable $th) {
 				return FALSE;
 			}
 		} else {
 			try {
 				//DB::statement(DB::raw('set @row:=0'));
-				return User_Eloquent::leftjoin('t_role_user', 't_role_user.user_id', '=', 't_users.id')
-					->leftjoin('t_roles', 't_role_user.role_id', '=', 't_roles.id')
+				return User_Eloquent::leftjoin('t_users_has_t_roles', 't_users_has_t_roles.t_users_id', '=', 't_users.id')
+					->leftjoin('t_roles', 't_users_has_t_roles.t_roles_id', '=', 't_roles.id')
 					->where('t_users.id', '!=', $except_id)
-					->selectRaw('t_users.*, t_role_user.role_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id, t_roles.rolename, ROW_NUMBER() OVER(ORDER BY t_users.updated_at DESC) AS row')
 					->orderBy('row', 'asc')
 					->skip($skip)->take($take)->get();
 				/*
-					->selectRaw('t_users.*, t_role_user.role_id,t_roles.rolename, @row:=@row+1 as row')
+					->selectRaw('t_users.*, t_users_has_t_roles.t_roles_id,t_roles.rolename, @row:=@row+1 as row')
 					->orderBy('t_users.updated_at', 'desc')
 					->get();*/
 
-				//->get(['t_users.*', 't_role_user.role_id', 't_roles.rolename', 't_role_user.updated_at as updated_at_role']);
+				//->get(['t_users.*', 't_users_has_t_roles.t_roles_id', 't_roles.rolename', 't_users_has_t_roles.updated_at as updated_at_role']);
 			} catch (\Throwable $th) {
 				return FALSE;
 			}

@@ -19,7 +19,7 @@ class Eloquent
 
         $options = [];
         $trust_server_certificate = NULL;
-        if (getenv('DBConnect') == 'sqlsrv') {
+        if (env('DB_DRIVER') == 'sqlsrv') {
             $options = array(
                 PDO::SQLSRV_ATTR_FETCHES_NUMERIC_TYPE => true,
                 PDO::SQLSRV_ATTR_QUERY_TIMEOUT => 60,
@@ -57,7 +57,7 @@ class Eloquent
             'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
-            // 'encrypt' => env('DB_ENCRYPT', 'yes'),
+            'encrypt' => env('DB_ENCRYPT', 'yes'),
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
             'options' => $options,
         ]);

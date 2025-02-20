@@ -287,6 +287,15 @@
         </ul>
     </section>
 
+    <section>
+        <ul>
+            <?php foreach ($roles as $role): ?>
+                <li><?= $role->rolename ?></li>
+                <li><?= $role->guard_name ?></li>
+            <?php endforeach ?>
+        </ul>
+    </section>
+
     <div class="further">
 
         <section>
